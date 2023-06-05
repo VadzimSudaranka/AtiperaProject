@@ -56,7 +56,7 @@ class GitHubService {
         HttpHeaders headers = new HttpHeaders();
         headers.set(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE);
 
-        URI url = UriComponentsBuilder.fromUriString("https://api.github.com/users/" + userName + "/repos")
+        URI url = UriComponentsBuilder.fromUriString("https://api.github.com/users/" + userName + "/repos?fork=false")
                 .build().toUri();
 
         RequestEntity<Void> requestEntity = RequestEntity.get(url)
