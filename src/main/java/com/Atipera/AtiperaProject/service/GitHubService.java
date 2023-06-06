@@ -1,79 +1,64 @@
 package com.Atipera.AtiperaProject.service;
 
-import com.Atipera.AtiperaProject.exceptions.GitHubApiException;
-import com.Atipera.AtiperaProject.model.*;
+import com.Atipera.AtiperaProject.model.BranchInfo;
+import com.Atipera.AtiperaProject.model.GitHubBranch;
+import com.Atipera.AtiperaProject.model.GitHubRepository;
+import com.Atipera.AtiperaProject.model.RepositoryInfo;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.web.client.RestTemplateBuilder;
-import org.springframework.http.*;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.HttpClientErrorException;
-import org.springframework.web.client.RestTemplate;
-import org.springframework.web.util.UriComponentsBuilder;
+import org.springframework.web.reactive.function.client.WebClient;
 
-import java.net.URI;
+
 import java.util.ArrayList;
 import java.util.List;
 
 @Service
-public
-class GitHubService {
-    private final RestTemplate restTemplate;
+public class GitHubService {
+    private final WebClient webClient;
 
     @Autowired
-    public GitHubService(RestTemplateBuilder restTemplateBuilder) {
-        this.restTemplate = restTemplateBuilder.build();
+    public GitHubService(WebClient.Builder webClientBuilder) {
+        this.webClient = webClientBuilder.build();
     }
 
     public List<RepositoryInfo> getRepositories(String userName) {
-        try {
-            GitHubRepository[] repositories = fetchRepositoriesFromGitHub(userName);
-            List<RepositoryInfo> repositoryInfos = new ArrayList<>();
+        GitHubRepository[] repositories = fetchRepositoriesFromGitHub(userName);
+        List<RepositoryInfo> repositoryInfos = new ArrayList<>();
 
-            for (GitHubRepository repository : repositories) {
-                RepositoryInfo repositoryInfo = new RepositoryInfo();
-                repositoryInfo.setRepositoryName(repository.getName());
-                repositoryInfo.setOwnerLogin(repository.getOwner().getLogin());
+        for (GitHubRepository repository : repositories) {
+            RepositoryInfo repositoryInfo = new RepositoryInfo();
+            repositoryInfo.setRepositoryName(repository.getName());
+            repositoryInfo.setOwnerLogin(repository.getOwner().getLogin());
 
-                List<BranchInfo> branches = new ArrayList<>();
-                for (GitHubBranch branch : fetchBranchesFromGitHub(userName, repository.getName())) {
-                    BranchInfo branchInfo = new BranchInfo();
-                    branchInfo.setBranchName(branch.getName());
-                    branchInfo.setLastCommit(branch.getCommit().getSha());
-                    branches.add(branchInfo);
-                }
-
-                repositoryInfo.setBranches(branches);
-                repositoryInfos.add(repositoryInfo);
+            List<BranchInfo> branches = new ArrayList<>();
+            for (GitHubBranch branch : fetchBranchesFromGitHub(userName, repository.getName())) {
+                BranchInfo branchInfo = new BranchInfo();
+                branchInfo.setBranchName(branch.getName());
+                branchInfo.setLastCommit(branch.getCommit().getSha());
+                branches.add(branchInfo);
             }
-
-            return repositoryInfos;
-        } catch (HttpClientErrorException.NotFound e) {
-            throw new GitHubApiException(404, "User not found");
+            repositoryInfo.setBranches(branches);
+            repositoryInfos.add(repositoryInfo);
         }
+        return repositoryInfos;
     }
 
     private GitHubRepository[] fetchRepositoriesFromGitHub(String userName) {
-        HttpHeaders headers = new HttpHeaders();
-        headers.set(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE);
-
-        URI url = UriComponentsBuilder.fromUriString("https://api.github.com/users/" + userName + "/repos")
-                .build().toUri();
-
-        RequestEntity<Void> requestEntity = RequestEntity.get(url)
-                .headers(headers)
-                .build();
-
-        ResponseEntity<GitHubRepository[]> responseEntity = restTemplate.exchange(requestEntity, GitHubRepository[].class);
-        return responseEntity.getBody();
+        return webClient.get()
+                .uri("https://api.github.com/users/" + userName + "/repos?forks=false")
+                .header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
+                .retrieve()
+                .bodyToMono(GitHubRepository[].class)
+                .block();
     }
 
-    private GitHubBranch[] fetchBranchesFromGitHub(String userName, String repositoryName) {
-        URI url = UriComponentsBuilder.fromUriString("https://api.github.com/repos/" + userName + "/" + repositoryName + "/branches")
-                .build().toUri();
-
-        RequestEntity<Void> requestEntity = RequestEntity.get(url).build();
-
-        ResponseEntity<GitHubBranch[]> responseEntity = restTemplate.exchange(requestEntity, GitHubBranch[].class);
-        return responseEntity.getBody();
+    public GitHubBranch[] fetchBranchesFromGitHub(String userName, String repositoryName) {
+        return webClient.get()
+                .uri("https://api.github.com/repos/" + userName + "/" + repositoryName + "/branches")
+                .retrieve()
+                .bodyToMono(GitHubBranch[].class)
+                .block();
     }
 }
